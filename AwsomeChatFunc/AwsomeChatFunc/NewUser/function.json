@@ -1,0 +1,18 @@
+﻿{
+  "disabled": false,
+  "scriptFile": "..\\bin\\AwsomeChatFunc.dll",
+  "entryPoint": "AwsomeChatFunc.Program.NewUser",
+  "bindings": [
+    {
+      "authLevel": "function",
+      "name": "req",
+      "type": "httpTrigger",
+      "direction": "in"
+    },
+    {
+      "name": "res",
+      "type": "http",
+      "direction": "out"
+    }
+  ]
+}

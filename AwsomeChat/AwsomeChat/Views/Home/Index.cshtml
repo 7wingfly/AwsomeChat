@@ -1,0 +1,362 @@
+﻿@using Microsoft.ServiceBus.Messaging
+
+@{
+    ViewBag.Title = "Home Page";
+    string[] RecentEvents = (string[])ViewBag.RecentEvents;
+}
+
+<style type="text/css">   
+    input[type="text"] {
+        width: 100%;
+        box-sizing: border-box;
+        -webkit-box-sizing: border-box;
+        -moz-box-sizing: border-box;
+    }
+</style>
+
+<script type="text/javascript" charset="utf8" src="//code.jquery.com/jquery-1.11.1.min.js"></script>
+<script src="~/Scripts/jquery.signalR-2.2.1.js"></script>
+<script src="~/signalr/hubs"></script>
+<script type="text/javascript">   
+
+    var myName = null;
+
+    $(document).ready(function () {
+
+        var name = GetCookie("name");
+        if (name == "") {
+            ShowNameWindow();
+        } else {
+            GetAllUsers();
+            ShowChatWindow();
+            myName = name;
+            lblName.innerHTML = name;
+        }
+
+        txtMessage.addEventListener("keyup", function (event) {
+            event.preventDefault();
+            if (event.keyCode == 13) {
+                SendMessage(txtMessage.value);
+            }
+        });
+
+        txtName.addEventListener("keyup", function (event) {
+            event.preventDefault();
+            if (event.keyCode == 13) {
+                SetName(txtName.value);
+            }
+        });
+
+        @foreach (string Event in RecentEvents.Where(e => e != null && e.Length > 0 & !e.Contains("{\"type\":\"Command\"")))
+        {
+            @:ProcessEvent(JSON.parse('@Html.Raw(Event)', true));
+        }
+
+        console.log($.connection.awsomeChatHub);
+
+        $.connection.hub.url = "/signalr"
+        $.connection.hub.start();
+        var AwsomeChatHubClient = $.connection.awsomeChatHub;
+
+        AwsomeChatHubClient.client.NewEvent = function (data) {           
+            var event = JSON.parse(data);
+            ProcessEvent(event);
+        };
+
+        $.connection.hub.start();       
+    });
+
+    function ProcessEvent(Event) {
+        console.log(Event);
+        if (Event.type == 'Message') {
+            AddMessage(Event.From, Event.Content);
+            UpdateUser(Event.From, 'Online');
+        }
+        if (Event.type == 'Command') {
+            if (Event.Instruction == 'ADDUSER') {
+                AddUser(Event.Parameters, 'Online');
+            }
+            else if (Event.Instruction == 'DELETEUSER') {
+                if (Event.Parameters == myName) {
+                    Leave();
+                    //alert("You have been kicked off due to 30 minutes of inactivity");
+                }
+                else {
+                    DeleteUser(Event.Parameters);
+                }
+            }
+            else if (Event.Instruction == 'UPDATEUSER') {
+                UpdateUser(Event.Parameters, 'Away');
+            }
+        }
+    }
+
+    // COOKIE FUNCTIONS //
+
+    function SetCookie(name) {
+        var d = new Date();
+        d.setTime(d.getTime() + (30 * 60 * 1000));
+        var expires = "expires=" + d.toGMTString();
+        document.cookie = "name=" + name + ";" + expires + ";path=/";
+    }
+
+    function GetCookie(cname) {
+        var name = cname + "=";
+        var decodedCookie = decodeURIComponent(document.cookie);
+        var ca = decodedCookie.split(';');
+        for (var i = 0; i < ca.length; i++) {
+            var c = ca[i];
+            while (c.charAt(0) == ' ') {
+                c = c.substring(1);
+            }
+            if (c.indexOf(name) == 0) {
+                return c.substring(name.length, c.length);
+            }
+        }
+        return "";
+    }
+
+    function DeleteCookie() {
+        document.cookie = "name=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+    }
+
+    // GUI FUNCTIONS //
+
+    function ShowChatWindow() {
+        divName.style.display = "none";
+        divChat.style.display = "block";
+        divTools.style.display = "block";
+        txtName.value = "";
+    }
+
+    function ShowNameWindow() {
+        divName.style.display = "block";
+        divChat.style.display = "none";
+        divTools.style.display = "none";
+    }
+
+    function AddUser(name, status) {
+        var check = document.getElementById(name + "-div");
+
+        if (check == null) {
+            var userGUIdiv = document.createElement("div");
+            var userGUItext = document.createElement("h5");
+            var userGUIstatus = document.createElement("Canvas");
+            var userGUIbr = document.createElement("br");
+
+            userGUIstatus.id = name + "-status";
+            userGUIstatus.style.cssFloat = "left";
+            userGUIstatus.height = 15;
+            userGUIstatus.width = 15;
+
+            userGUItext.id = name + "-text";
+            userGUItext.style.cssFloat = "left";
+            userGUItext.style.margin = 0;
+            userGUItext.style.paddingLeft = "5px";
+
+            userGUIdiv.id = name + "-div";
+            userGUIdiv.appendChild(userGUIstatus);
+            userGUIdiv.appendChild(userGUItext);
+
+            userGUIbr.id = name + "-br";
+
+            userGUItext.innerText = name;
+
+            divUsers.appendChild(userGUIdiv);
+            divUsers.appendChild(userGUIbr);
+
+            var ctx = userGUIstatus.getContext("2d");
+            ctx.beginPath();
+            ctx.arc(10, 7.5, 5, 0, 2 * Math.PI);
+
+            if (status == "Online") {
+                ctx.fillStyle = "lightgreen";
+            }
+            else if (status == "Away") {
+                ctx.fillStyle = "orange";
+            }
+
+            ctx.fill();
+        }
+    }
+
+    function DeleteUser(name, status) {
+        var userGUIdiv = document.getElementById(name + "-div");
+        var userGUIbr = document.getElementById(name + "-br");
+        if (userGUIdiv != null) {
+            divUsers.removeChild(userGUIdiv);
+            divUsers.removeChild(userGUIbr);
+        }
+    }
+
+    function UpdateUser(name, status) {
+        var userGUIstatus = document.getElementById(name + "-status");
+
+        if (userGUIstatus != null) {
+            var ctx = userGUIstatus.getContext("2d");
+
+            if (status == "Online") {
+                ctx.fillStyle = "lightgreen";
+            }
+            else if (status == "Away") {
+                ctx.fillStyle = "orange";
+            }
+
+            ctx.fill();
+        }
+    }
+
+    function AddMessage(from, message) {
+        var msgGUIdiv = document.createElement("div");
+        var msgGUIfrom = document.createElement("h5");
+        var msgGUIcontent = document.createElement("h5");
+        var msgGUIbr = document.createElement("br");
+
+        msgGUIfrom.style.cssFloat = "left";
+        msgGUIfrom.style.margin = 0;
+        msgGUIfrom.style.paddingLeft = "5px";
+        msgGUIfrom.style.width = "100px";
+
+        msgGUIcontent.style.cssFloat = "left";
+        msgGUIcontent.style.margin = 0;
+        msgGUIcontent.style.paddingLeft = "5px";
+
+        msgGUIfrom.innerText = from + ": ";
+        msgGUIcontent.innerText = message;
+
+        if (from == "SYS") {
+            msgGUIfrom.style.color = "gray";
+            msgGUIcontent.style.color = "gray";
+        }
+        else {
+            msgGUIfrom.style.color = "white";
+        }
+
+        msgGUIdiv.appendChild(msgGUIfrom);
+        msgGUIdiv.appendChild(msgGUIcontent);
+
+        divMessages.appendChild(msgGUIdiv);
+        divMessages.appendChild(msgGUIbr);
+        divMessages.parentElement.scrollTop = divMessages.parentElement.scrollHeight;
+    }
+
+    // AJAX QUERIES //
+
+    function SetName(name) {
+        if (name.length < 3)
+            alert("Name must be longer than 3 characters")
+        else if (name.length > 10)
+            alert("Name must be shorter than 10 characters")
+        else {
+            var data = { "Name": name }
+            $.ajax({
+                url: 'https://awsomechatfunc.azurewebsites.net/api/NewUser?code=E/knnLOlxlqT0SxTK0Dgyw9tYBju3FVM4hePEOi2D/Xqtj2X233zfg==',
+                type: 'GET',
+                data: data,
+                contentType: "application/json; charset=utf-8",
+                success: function (data) {
+                    lblName.innerHTML = name;
+                    myName = name;
+                    SetCookie(name);
+                    GetAllUsers();
+                    ShowChatWindow();
+                },
+                error: function (XMLHttpRequest, textStatus, errorThrown) {
+                    if (errorThrown == "Conflict")
+                        alert("This name is already in use. Please use another name.");
+                    else
+                        alert("an unknown error has occured: " + errorThrown)
+                }
+            });
+        }
+    }
+
+    function Leave(name) {
+        ShowNameWindow();
+        lblName.innerHTML = name;
+        myName = null;
+        DeleteCookie();
+        divUsers.innerHTML = '';
+
+        var data = { "Name": name }
+        $.ajax({
+            url: 'https://awsomechatfunc.azurewebsites.net/api/DeleteUser?code=d3zKnnDwJPU3Y731e4BOrOtsGc4AnBJIOaoXme8eN83y6CCSerZf6Q==',
+            type: 'GET',
+            data: data,
+            contentType: "application/json; charset=utf-8"
+        });
+    }
+
+    function SendMessage(message) {
+        if (txtMessage.value != "") {
+            txtMessage.value = "";
+            var data = { "Name": myName, "Message": message }
+            $.ajax({
+                url: 'https://awsomechatfunc.azurewebsites.net/api/SendMessage?code=mlxd3lnDxF/aTeaq5xDqoEvmpzxAmROV8V3ib8meSXA0LrRYdm5u5g==',
+                type: 'GET',
+                data: data,
+                contentType: "application/json; charset=utf-8",
+                success: function (data) {
+                    SetCookie(myName); //reset cookie expireation time.
+                },
+                error: function (XMLHttpRequest, textStatus, errorThrown) {
+                    alert("An error occured whilst trying to send your message: " + errorThrown);
+                }
+            });
+        }
+        else {
+            alert("Type a message!");
+        }
+    }
+
+    function GetAllUsers() {
+        divUsers.innerHTML = '';
+        $.ajax({
+            url: 'https://awsomechatfunc.azurewebsites.net/api/GetAllUsers?code=P63IFDqDjRWXJypxgs53fGZYw0M7IJoP2Uao9pJlcvOX7pHRwY3ORg==',
+            type: 'GET',
+            contentType: "application/json; charset=utf-8",
+            success: function (data) {
+                var users = JSON.parse(data);
+                for (var key in users) {
+                    if (users.hasOwnProperty(key)) {
+                        var user = users[key];
+                        AddUser(user.Name, user.Status);
+                    }
+                }
+            },
+            error: function (XMLHttpRequest, textStatus, errorThrown) {
+                alert("An error occured whilst trying retreive a list of users: " + errorThrown);
+            }
+        });
+    }   
+
+</script>
+
+<div id="divName" style="margin:auto; width:350px; height:150px; background-color:slategray; padding:20px; margin-top: 100px">
+    <h3 style="margin:5px">Enter your name</h3>
+    <input id="txtName" type="text" style=" max-width:100000px" />
+    <input id="btnOK" onclick="SetName(txtName.value)" type="button" value="OK" style="float:right; margin:20px; width:80px" />
+</div>
+<div id="divTools" style="width:100%; height:50px; display:none">
+    <h3 id="lblName" style="float:left; margin:20px;">Name</h3>
+    <input id="btnLeave" onclick="Leave(myName)" type="button" value="Leave AwsomeChat" style="float:right; margin:20px" />
+</div>
+<div id="divChat" style="height:600px; width:100%; padding: 20px; min-width:300px; display:none">
+    <div style="float: left; height:100%; width:30%; background-color:slategray; ">
+        <h4 style="margin-top: 10px; margin-left:10px; height:20px">Users:</h4>
+        <div style="height:calc(100% - 40px); overflow-y:auto">
+            <div id="divUsers" style="margin:10px; height:auto; ">
+            </div>
+        </div>
+    </div>
+    <div style="float: left; height:100%; width:70%; background-color:#849bb1">
+        <div style="height:calc(100% - 40px); overflow-y:scroll">
+            <div id="divMessages" style="margin:10px; height:auto; ">
+            </div>
+        </div>
+        <div style="height:40px; background:#5e7a96; padding: 7px; width:100%">
+            <input id="txtMessage" type="text" style="float:left; max-width:100000px; width:calc(100% - 100px)" />
+            <input id="btnSend" type="button" style="float:left; width: 94px" value="Send" onclick="SendMessage(txtMessage.value)"/>
+        </div>
+    </div>
+</div>   
